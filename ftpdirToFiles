@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+
+var util = require('util'),
+    forever = require('forever'),
+    os = require('os');
+
+var
+    master_host = "127.0.0.1:8080",
+    cpu_nums = os.cpus().length,
+    script = __filename + '.js',
+    childs = [],
+    target;
+
+for (var i=0; i<cpu_nums*3; i++) {
+	target = new (forever.Monitor)(script, { 'options': [ "--host", master_host] });
+	target.start();
+	childs.push(target);
+	util.puts('Forever process running ' + script + ' ' + childs.length);
+}
+

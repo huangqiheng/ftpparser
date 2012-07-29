@@ -17,12 +17,6 @@ var sprintf = require('sprintf').sprintf;  //要安装
 ----------------------------------------------------*/
 
 program	.version('0.0.1')
-	//客户端参数
-	.option('-l, --url <ftp url>', 'full name url, as ftp://usr:pwd@server.com/sub/')
-	.option('-e, --encoding [utf8]', 'ftp server return text encoding', 'utf8')
-	.option('-t, --job_timeout [microsecond]', 'the whole time out, default 3 min', '180000')
-	.option('-c, --conn_timeout [second]', 'the curl download time out, default 5s', '5')
-	//工作者参数， 共同参数
 	.option('-h, --host [ip:port]', 'master host(TCP)', '127.0.0.1:8080')
 	.parse(process.argv);
 
@@ -37,25 +31,6 @@ function split_host(val, default_port) {
 var master_host = split_host(program.host, '8080');
 var master_url = 'http://'+master_host[0]+':'+master_host[1];
 var func_name = path.basename(__filename, '.js');
-
-//客户端模式
-if (program.url)
-{
-	var start_cli = restify.createJsonClient({
-		url: master_url,
-		version: '*'
-	});
-
-	var ftp_url = qs.escape(program.url);
-	var get_url = sprintf('/gearman/ftpdirToFiles?url=%s&encoding=%s&connectTimeout=%s&jobTimeout=%s',
-			ftp_url, program.encoding, program.conn_timeout, program.job_timeout);
-
-	start_cli.get(get_url, function(err, req, res, reply) {
-		assert.ifError(err);
-		process.stdout.write(JSON.stringify(reply));
-		process.exit(0);
-	});
-} 
 
 /*----------------------------------------------------
   解释刚下载得到的目录信息

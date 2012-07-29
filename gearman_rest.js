@@ -33,6 +33,7 @@ var gm_host = split_host(program.gmhost, '4730');
 
 var gm_client = new Gearman(gm_host[0], gm_host[1]);
 
+
 var gm_jobs = [];
 var url_done = [];
 var dir_done = [];

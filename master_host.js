@@ -34,71 +34,90 @@ var gm_host = split_host(program.gmhost, '4730');
 var gm_client = new Gearman(gm_host[0], gm_host[1]);
 
 
-var gm_jobs = [];
-var url_done = [];
-var dir_done = [];
-var empty_dirs = [];
+var getdir_jobs_queue = [];
+var getdir_jobs = [];
+var getdir_jobs_done = [];
+var getdir_jobs_empty = [];
 
-var client_tick_couter = 0;
+var parsing_jobs_queue = [];
+var parsing_jobs = [];
+var parsing_jobs_done = [];
 
-setInterval(function () {
-	client_tick_couter++;
+var client_tick_counter = 0;
 
-	var undone = gm_jobs.filter(function(element, index, array) {
+
+function report_state() 
+{
+	logger.debug('dirs:(wait:%d -> done:%d Empty:%d)', getdir_jobs_queue.length, getdir_jobs_done.length, getdir_jobs_empty.length);
+	logger.debug('files:(wait:%d -> done:%d)', parsing_jobs_queue.length, parsing_jobs_done.length);
+}
+
+
+function redo_failure_jobs(job_list, max_count) 
+{
+	var result = max_count;
+	var undone = job_list.filter(function(element, index, array) {
 		return (element.result != 'done');
 		});
 
 	if (undone.length) {
-		var null_list = undone.filter(function(element, index ,array) {
-			return (element.result == 'null');
+		var wait_list = undone.filter(function(element, index ,array) {
+			return (element.result == 'wait');
 			});
 		var send_list = undone.filter(function(element, index ,array) {
-			return (element.result != 'null');
+			return (element.result != 'wait');
 			});
 
-		var count = 0;
-		if (client_tick_couter % 5 === 0) {
-			print_counter('unfinish jobs: ' + (null_list.length));
+		var can_send = result - wait_list.length;
 
-			if (client_tick_couter % 30 === 0) {
-				for (var i=0; i<null_list.length; i++) {
-					var job = null_list[i];
-					logger.log('  ['  + (++count) + ':' + job.result + '] ' + job.sender.ftp_url);
+		if (can_send > 0) {
+			job_list = wait_list;
+			for (var i=0; i<send_list.length; i++, can_send--) {
+				var job = send_list[i];
+				if (can_send > 0) {
+					result--;
+					submit_job_command(job_list, job.sender);
+				} else {
+					job_list.push(job);
 				}
 			}
-		}
-
-		count = 0;
-		gm_jobs = null_list;
-		for (var i=0; i<send_list.length; i++) {
-			if (count == 0) {
-				logger.trace('list reset jobs: ' + (send_list.length));
-			}
-			var job = send_list[i];
-			submit_job_command(job.sender);
-			logger.trace('  ['  + (++count) + ':' + job.result + '] ' + job.sender.ftp_url);
 		}
 	} 
-	else 
-	{
-		if ((url_done.length) && (dir_done.length)) {
-			if (client_tick_couter % 5 === 0) {
-				logger.log('all completed:  urls(%d) dirs(%d) empty(%d)', url_done.length, dir_done.length, empty_dirs.length);
-				print_counter('counter report');
-			}
-		
-			if (client_tick_couter % 30 === 0) {
-				for (var i=0; i<empty_dirs.length; i++) {
-					if (i === 0) {
-						logger.debug('empty dirs:');
-					}
-					logger.debug('  ['  + i + '] ' + empty_dirs[i]);
-				}
-			}
-			//process.exit(0);
+
+	return (result);
+}
+
+function push_waitque_to_submit(wait_queue, job_list, max_count) 
+{
+	var result = 0;
+	for (var i=0; i<max_count; i++) {
+		var sender = wait_queue.shift();
+		if (sender) {
+			result++;
+			submit_job_command(job_list, sender);
+		} else {
+			break;
 		}
 	}
+	return (result);
+}
 
+setInterval(function () 
+{
+	client_tick_counter++;
+
+	var def_max_submit = 100;
+	var maxdo_getdir = redo_failure_jobs(getdir_jobs, def_max_submit);
+	push_waitque_to_submit(getdir_jobs_queue, getdir_jobs, maxdo_getdir);
+
+	var maxdo_parsing = redo_failure_jobs(parsing_jobs, def_max_submit);
+	push_waitque_to_submit(parsing_jobs_queue, parsing_jobs, maxdo_parsing);
+
+	if (client_tick_counter % 5 === 0) {
+		if ((getdir_jobs_queue.length === 0) && (maxdo_getdir+maxdo_parsing === def_max_submit*2)) {
+			report_state();
+		}
+	}
 }, 1000);
 
 /*----------------------------------------------------
@@ -158,7 +177,7 @@ server.get('/gearman/ftpdirToFiles', function (req, res, next)
 		err_reason = 'handle logic error!';
 		var sender = Sender(null, 'ftpdirToFiles', ftp_url, ftp_url, req.params.encoding, 
 				req.params.jobTimeout, req.params.connectTimeout);
-		cmd_handle = submit_job_command(sender);
+		cmd_handle = submit_job_queue(getdir_jobs_queue, sender);
 	} while (false);
 
 	res.json(def_result(err_reason, cmd_handle));
@@ -168,44 +187,33 @@ server.get('/gearman/ftpdirToFiles', function (req, res, next)
 
 server.put('/gearman/ftpdirToFiles', function (req, res, next) 
 {
-	var err_reason = 'parameter error!';
-	var cmd_handle = '';
+	var report_val = req.body;
+	assert(report_val);
+	var reporter = JSON.parse(report_val);
+	assert(reporter);
 
-	do {
-		var report_val = req.body;
-		if (!report_val) break;
+	ftpdir_to_files_report(reporter);
 
-		err_reason = 'parmaeter type error!';
-		if (typeof report_val != 'string') break;
-
-		err_reason = 'parmaeter parser error!';
-		var reporter = JSON.parse(report_val);
-		if (!reporter) break;
-
-		cmd_handle = ftpdir_to_files_report(reporter);
-	} while (false);
-
-	res.json(def_result(err_reason, cmd_handle));
+	var res_yes = {};
+	res_yes.result = 'ok';
+	res_yes.handle = reporter.sender.handle;
+	res.json(res_yes);
 	return next();
 });
 
 server.put('/gearman/fileToDatabase', function (req, res, next) 
 {
-	var err_reason = 'parameter error!';
-	var cmd_handle = '';
+	var report_val = req.body;
+	assert(report_val);
+	var reporter = JSON.parse(report_val);
+	assert(reporter);
 
-	do {
-		var report_val = req.body;
-		if (!report_val) break;
+	fileToDatabase_report(reporter);
 
-		err_reason = 'parmaeter format error!';
-		if (typeof report_val != 'string') break;
-
-		var reporter = JSON.parse(report_val);
-		cmd_handle = fileToDatabase_report(reporter);
-	} while (false);
-
-	res.json(def_result(err_reason, cmd_handle));
+	var res_yes = {};
+	res_yes.result = 'ok';
+	res_yes.handle = reporter.sender.handle;
+	res.json(res_yes);
 	return next();
 });
 
@@ -227,31 +235,24 @@ function Sender(handle, func_name, ftp_ori, ftp_url, ftp_encoding, job_timeout, 
 	return sender;
 }
 
-var submit_counter = 0;
-var report_counter = 0; 
-
-function print_counter(msg)
-{
-	logger.log('(submit:%d, report:%d) %s', submit_counter, report_counter, msg);
-}
-
-function submit_job_command(sender) 
+function submit_job_queue(job_list, sender)
 {
 	if (!sender.handle) {
 		sender.handle = uuid.v4();
 	}
 
-	logger.log(sender);
+	job_list.push(JSON.parse(JSON.stringify(sender)));
+	return (sender.handle);
+}
 
+function submit_job_command(job_list, sender) 
+{
 	var job = gm_client.submitJob(sender.func_name, JSON.stringify(sender));
-	gm_jobs.push(job);
-
-	submit_counter++;
+	job_list.push(job);
 
 	job.setTimeout(parseInt(sender.job_timeout));
-	job.sender = Sender(sender.handle, sender.func_name, sender.ftp_ori, sender.ftp_url,
-				sender.ftp_encoding,sender.job_timeout,sender.conn_timeout);
-	job.result = 'null';
+	job.sender = JSON.parse(JSON.stringify(sender));
+	job.result = 'wait';
 
 	job.on("timeout", function() {
 		this.result = 'timeout';
@@ -271,8 +272,6 @@ function submit_job_command(sender)
 	job.on("end", function() {
 		logger.debug('job end(' + this.result + '): ' + this.sender.ftp_url);
 	});
-
-	return (sender.handle);
 }
 
 function ftpdir_to_files_report (report) 
@@ -282,49 +281,42 @@ function ftpdir_to_files_report (report)
 	var new_dirs 	= report.dirs;
 	var finish_url = sender.ftp_url;
 
-	report_counter++;
-	dir_done.push(finish_url);
+	getdir_jobs_done.push(finish_url);
 
 	//将新发现的目录，递归新请求
 	for (var i=0; i<new_dirs.length; i++) {
 		var item = new_dirs[i];
 		if (item) {
 			sender.ftp_url = item;
-			submit_job_command(sender);
+			submit_job_queue(getdir_jobs_queue, sender);
 		}
 	}
 
 	//将新发现的文件，接着请求新命令
 
+	sender.func_name = 'fileToDatabase';
+
 	for (var i=0; i<new_urls.length; i++) {
 		var item = new_urls[i];
 		if (item) {
-			url_done.push(item);
-			fileToDatabase_command(sender);
+			sender.ftp_url = item;
+			submit_job_queue(parsing_jobs_queue, sender);
 		}
 	}
 
 	//记录空目录
 	if ((new_urls.length === 0) && (new_dirs.length === 0)) {
-		empty_dirs.push(finish_url);
+		getdir_jobs_empty.push(finish_url);
 	}
-
-	logger.debug('(dir:%d file:%d empty:%d) %s', dir_done.length, url_done.length, empty_dirs.length, finish_url);
-	return (sender.handle);
 }
 
-function fileToDatabase_command(sender)
-{
-
-
-	return (sender.handle);
-}
 
 function fileToDatabase_report(report)
 {
 	var sender 	= report.sender;
+	var finish_url = sender.ftp_url;
 
-	return (sender.handle);
+	parsing_jobs_done.push(finish_url);
 }
 
 

@@ -2,6 +2,7 @@
 
 var qs = require('querystring');
 var path = require('path');
+var fs = require('fs');
 var csv = require('csv');
 var assert = require('assert');
 var logger = require('tracer').colorConsole(); //要安装
@@ -11,6 +12,7 @@ var spawn = require('child_process').spawn;
 var restify = require('restify');  //要安装
 var program = require('commander');  //要安装
 var sprintf = require('sprintf').sprintf;  //要安装
+var uuid = require('node-uuid'); //安装
 
 /*----------------------------------------------------
    处理命令行
@@ -32,41 +34,10 @@ var master_host = split_host(program.host, '8080');
 var master_url = 'http://'+master_host[0]+':'+master_host[1];
 var func_name = path.basename(__filename, '.js');
 
-/*----------------------------------------------------
-  解释刚下载得到的目录信息
-----------------------------------------------------*/
+var down_path = __dirname + '/tempdown';
 
-function parse_csv_result(ftp_url, csv_src, new_dir_cb, new_file_cb, err_cb, end_cb) 
-{
-	var csved = csv();
-	csved.from(csv_src, {delimiter:' '});
-
-	csved.transform(function(data) {
-		var newdata = data.filter(function(element, index, array) {
-			return (element != '');
-		});
-		return newdata;
-	});
-
-	csved.on('data', function(data, index) {
-		var file_name = data[data.length - 1];
-
-		if (data[1] == '1') {
-			new_file_cb(ftp_url + file_name);
-		} else {
-			file_name = ftp_url + file_name + '/';
-			new_dir_cb(file_name);
-		}
-	});
-		
-	csved.on('end', function(count) {
-		end_cb(count);
-	});
-
-	csved.on('error', function(error) {
-		logger.debug('csv error: ' + error.message);
-		err_cb(error);
-	});
+if (!path.existsSync(down_path)) {
+	fs.mkdirSync(down_path, 0755);
 }
 
 
@@ -126,33 +97,15 @@ function iconv_convert(input, from, to, done_cb)
 /*----------------------------------------------------
   curl下载，紧接着iconv转换，使用shell命令
 ----------------------------------------------------*/
-function curl_iconv(curl_opt, iconv_opt, done_cb) 
+function curl_download(curl_opt, done_cb) 
 {
-	var i_from = iconv_opt.indexOf('-f');
-	var i_to = iconv_opt.indexOf('-t');
-
-	if ((i_from == -1) || (i_from+1 >= iconv_opt.length) 
-		|| (i_to == -1) || (i_to+1 >= iconv_opt.length)) {
-		done_cb(1, null, 'iconv parameter error!');
-		return;
-	}
-	
-	var is_need_iconv = (iconv_opt[++i_from] != iconv_opt[++i_to]);
-
 	var curl_p    = spawn('curl', curl_opt);
-	var iconv_p   = is_need_iconv && spawn('iconv', iconv_opt);
 
 	var stderr_all = '';
 	var stdout_all = '';
-	var stdout_curl = '';
 
 	curl_p.stdout.on('data', function (data) {
-		stdout_curl += data;
-		if (is_need_iconv) {
-			iconv_p.stdin.write(data);
-		} else {
-			stdout_all += data;
-		}
+		stdout_all += data;
 	});
 
 	curl_p.stderr.on('data', function (data) {
@@ -165,31 +118,6 @@ function curl_iconv(curl_opt, iconv_opt, done_cb)
 			logger.debug(stderr_all);
 		}
 
-		if (is_need_iconv) {
-			iconv_p.stdin.end();
-			iconv_p.kill();
-		}
-
-		done_cb(code, stdout_all, stderr_all);
-	});
-
-
-	if (!is_need_iconv) {
-		return;
-	}
-
-	iconv_p.stdout.on('data', function (data) {
-		stdout_all += data;
-	});
-
-	iconv_p.stderr.on('data', function (data) {
-		stderr_all += data;
-	});
-
-	iconv_p.on('exit', function (code) {
-		if (code !== 0) {
-			logger.debug('iconv process exited with code ' + code);
-		}
 		done_cb(code, stdout_all, stderr_all);
 	});
 }
@@ -198,7 +126,7 @@ function curl_iconv(curl_opt, iconv_opt, done_cb)
 /*----------------------------------------------------
   curl下载，并解释结果
 ----------------------------------------------------*/
-function curl_ftp_dir (request, new_dir_cb, new_file_cb, err_cb, end_cb) 
+function send_curl_request(request, err_cb, end_cb) 
 {
 	iconv_convert(request.ftp_url, 'utf8', request.ftp_encoding, function (code, data, error) {
 		if (code !== 0) {
@@ -209,38 +137,29 @@ function curl_ftp_dir (request, new_dir_cb, new_file_cb, err_cb, end_cb)
 		var new_url = gb2312_url(data);
 		logger.debug('gb2312_url cmd: ' + new_url);
 
-		var curl_opt = ['--verbose', '--trace-time', '-s', '--raw', '--url', new_url, 
+		var output_file = down_path + '/'+ uuid.v4();
+
+		var curl_opt = ['--verbose', '--raw', 
+				'--url', new_url, 
+				'-o', output_file,
 				'--connect-timeout', request.conn_timeout];
-		var iconv_opt = ['-f', request.ftp_encoding, '-t', 'utf8', '--verbose'];
 
-
-
-		var curl_iconv_timeout_id = setTimeout(function() {
+		var curl_timeout_id = setTimeout(function() {
 			throw new Error('curl_iconv timeout!');
-		}, request.conn_timeout * 2 * 1000);
+		}, request.conn_timeout * 3 * 1000);
 
-		curl_iconv(curl_opt, iconv_opt, function (code, stdout, stderr) {
-			clearTimeout(curl_iconv_timeout_id);
+		curl_download(curl_opt, function (code, stdout, stderr) {
+			clearTimeout(curl_timeout_id);
 
 			if (code !== 0) {
 				err_cb(stderr);
 				return;
 			}
 
-			if (stdout) {
-				logger.log('\n'+stdout);
-				parse_csv_result(request.ftp_url, stdout, new_dir_cb, new_file_cb, err_cb, end_cb);
-				return;
-			}	
-
-			logger.debug(stderr);
-
 			if (stderr.lastIndexOf('* Closing connection #0') == -1) {
 				err_cb(stderr);
 			} else {
-				logger.debug('check as ok.');
-				logger.debug('is it real a empty dir?');
-				end_cb(0);
+				end_cb(stdout, stderr);
 			}
 		});
 	});
@@ -296,25 +215,18 @@ function main_worker(master, func_name)
 			assert(sender.ftp_encoding);
 			assert(sender.conn_timeout);
 
-			var reply_files = [];
-			var reply_dirs = [];
-
-			curl_ftp_dir(sender, function (new_dir) {
-					reply_dirs.push(new_dir);
-				}, function (new_file) {
-					reply_files.push(new_file);
-				}, function (err) {
+			send_curl_request(sender, function (err) {
 					no_counter++;
 					logger.debug(err);
 					logger.debug('job error: ' + sender.ftp_url);
 					logger.debug('reset! waitting for next job.');
 					print_counter();
 					worker.error();
-				}, function (succ_count) {
+				}, function (stdout, stderr) {
 					var report = {};
 					report.sender = sender;
-					report.urls = reply_files;
-					report.dirs = reply_dirs;
+					report.stdout = stdout;
+					report.stderr = stderr;
 
 					logger.trace('send rest report, waiting...');
 					logger.log(report);

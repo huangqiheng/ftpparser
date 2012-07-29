@@ -81,6 +81,8 @@ function redo_failure_jobs(job_list, max_count)
 					job_list.push(job);
 				}
 			}
+		} else {
+			result = 0;
 		}
 	} 
 
@@ -106,17 +108,17 @@ setInterval(function ()
 {
 	client_tick_counter++;
 
-	var def_max_submit = 100;
-	var maxdo_getdir = redo_failure_jobs(getdir_jobs, def_max_submit);
+	var max_submit_dirs = 100;
+	var max_submit_files = 50;
+
+	var maxdo_getdir = redo_failure_jobs(getdir_jobs, max_submit_dirs);
 	push_waitque_to_submit(getdir_jobs_queue, getdir_jobs, maxdo_getdir);
 
-	var maxdo_parsing = redo_failure_jobs(parsing_jobs, def_max_submit);
+	var maxdo_parsing = redo_failure_jobs(parsing_jobs, max_submit_files);
 	push_waitque_to_submit(parsing_jobs_queue, parsing_jobs, maxdo_parsing);
 
 	if (client_tick_counter % 5 === 0) {
-		if ((getdir_jobs_queue.length === 0) && (maxdo_getdir+maxdo_parsing === def_max_submit*2)) {
-			report_state();
-		}
+		report_state();
 	}
 }, 1000);
 
@@ -269,8 +271,8 @@ function submit_job_command(job_list, sender)
 		this.result = 'done';
 	}); 
 
+	//干点什么呢？如何销毁jobs对象？
 	job.on("end", function() {
-		logger.debug('job end(' + this.result + '): ' + this.sender.ftp_url);
 	});
 }
 

@@ -4,13 +4,14 @@ var qs = require('querystring');
 var path = require('path');
 var csv = require('csv');
 var assert = require('assert');
-var logger = require('tracer').colorConsole(); //要安装
 var Gearman = require("node-gearman"); //要安装
 var exec = require('child_process').exec;
 var spawn = require('child_process').spawn;
 var restify = require('restify');  //要安装
 var program = require('commander');  //要安装
 var sprintf = require('sprintf').sprintf;  //要安装
+var logger = require('tracer').dailyfile({root:'.', format : "{{timestamp}} <{{title}}> {{message}}",
+		dateformat : "HH:MM:ss"});
 
 /*----------------------------------------------------
    处理命令行

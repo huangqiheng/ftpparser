@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 var assert = require('assert');
-var logger = require('tracer').colorConsole();
 var program = require('commander');
 var restify = require('restify');
 var uuid = require('node-uuid'); //安装
 var Gearman = require("node-gearman");
 var qs = require('querystring');
+var logger = require('tracer').dailyfile({root:'.', format : "{{timestamp}} <{{title}}> {{message}}",
+		dateformat : "HH:MM:ss"});
 
 /*----------------------------------------------------
    处理命令行
@@ -48,8 +49,8 @@ var client_tick_counter = 0;
 
 function report_state() 
 {
-	logger.debug('dirs:(wait:%d -> done:%d Empty:%d)', getdir_jobs_queue.length, getdir_jobs_done.length, getdir_jobs_empty.length);
-	logger.debug('files:(wait:%d -> done:%d)', parsing_jobs_queue.length, parsing_jobs_done.length);
+	console.log('dirs:(wait:%d -> done:%d Empty:%d)', getdir_jobs_queue.length, getdir_jobs_done.length, getdir_jobs_empty.length);
+	console.log('files:(wait:%d -> done:%d)', parsing_jobs_queue.length, parsing_jobs_done.length);
 }
 
 

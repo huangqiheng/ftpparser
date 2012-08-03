@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+var fs = require('fs');
 var qs = require('querystring');
 var path = require('path');
 var csv = require('csv');
@@ -10,7 +11,12 @@ var spawn = require('child_process').spawn;
 var restify = require('restify');  //要安装
 var program = require('commander');  //要安装
 var sprintf = require('sprintf').sprintf;  //要安装
-var logger = require('tracer').dailyfile({root:'./log', format : "{{timestamp}} <{{title}}> {{message}}", dateformat : "HH:MM:ss"});
+
+var log_path = __dirname + '/log';
+var logger = require('tracer').dailyfile({root:log_path, format : "{{timestamp}} <{{title}}> {{message}}", dateformat : "HH:MM:ss"});
+if (!path.existsSync(log_path)) {
+	fs.mkdirSync(log_path, 0755);
+}
 
 /*----------------------------------------------------
    处理命令行

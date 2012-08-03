@@ -1,10 +1,18 @@
 #!/usr/bin/env node
 
 var util = require('util'),
+    hooker = require('./hookobj.js'),
     forever = require('forever'),
     os = require('os');
 
-var logger = require('tracer').dailyfile({root:'./log', format : "{{timestamp}} <{{title}}> {{message}}", dateformat : "HH:MM:ss"});
+var path = require('path');
+var fs = require('fs');
+var log_path = __dirname + '/log';
+var logger = require('tracer').dailyfile({root:log_path, format : "{{timestamp}} <{{title}}> {{message}}", dateformat : "HH:MM:ss"});
+if (!path.existsSync(log_path)) {
+	fs.mkdirSync(log_path, 0755);
+}
+
 
 var
     master_host = "127.0.0.1:8080",
@@ -13,20 +21,19 @@ var
     childs = [],
     target;
 
+var stdout = process.stdout;
+var stderr = process.stderr;
+hooker(stdout);
+hooker(stderr);
+stdout.hook('write', function(string, encoding, fd, write) {
+    logger.log(string);
+});
+stderr.hook('write', function(string, encoding, fd, write) {
+    logger.debug(string);
+});
+
 for (var i=0; i<cpu_nums*3; i++) {
 	target = new (forever.Monitor)(script, { 'options': [ "--host", master_host] });
-
-	target.stdout.on('data', function (data) {
-		logger.log(data);
-	});
-
-	target.stderr.on('data', function (data) {
-		logger.debug(data);
-	});
-
-	target.on('exit', function (code) {
-		logger.log('Child process exited with code: ' + code);
-	});
 
 	target.start();
 	childs.push(target);

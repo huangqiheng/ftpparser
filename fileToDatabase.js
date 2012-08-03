@@ -12,8 +12,12 @@ var restify = require('restify');  //要安装
 var program = require('commander');  //要安装
 var sprintf = require('sprintf').sprintf;  //要安装
 var uuid = require('node-uuid'); //安装
-var logger = require('tracer').dailyfile({root:'.', format : "{{timestamp}} <{{title}}> {{message}}",
-		dateformat : "HH:MM:ss"});
+
+var log_path = __dirname + '/log';
+var logger = require('tracer').dailyfile({root:log_path, format : "{{timestamp}} <{{title}}> {{message}}", dateformat : "HH:MM:ss"});
+if (!path.existsSync(log_path)) {
+	fs.mkdirSync(log_path, 0755);
+}
 
 /*----------------------------------------------------
    处理命令行

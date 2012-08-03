@@ -49,8 +49,8 @@ var client_tick_counter = 0;
 
 function report_state() 
 {
-	console.log('dirs:(wait:%d -> done:%d Empty:%d)', getdir_jobs_queue.length, getdir_jobs_done.length, getdir_jobs_empty.length);
-	console.log('files:(wait:%d -> done:%d)', parsing_jobs_queue.length, parsing_jobs_done.length);
+	logger.warn('dirs:(wait:%d -> done:%d Empty:%d)', getdir_jobs_queue.length, getdir_jobs_done.length, getdir_jobs_empty.length);
+	logger.warn('files:(wait:%d -> done:%d)', parsing_jobs_queue.length, parsing_jobs_done.length);
 }
 
 

@@ -3,6 +3,7 @@
 var util = require('util'),
     forever = require('forever'),
     os = require('os');
+var logger = require('tracer').dailyfile({root:'./log', format : "{{timestamp}} <{{title}}> {{message}}", dateformat : "HH:MM:ss"});
 
 var
     master_host = "127.0.0.1:8080",
@@ -13,8 +14,21 @@ var
 
 for (var i=0; i<cpu_nums*5; i++) {
 	target = new (forever.Monitor)(script, { 'options': [ "--host", master_host] });
+
+	target.stdout.on('data', function (data) {
+		logger.log(data);
+	});
+
+	target.stderr.on('data', function (data) {
+		logger.debug(data);
+	});
+
+	target.on('exit', function (code) {
+		logger.log('Child process exited with code: ' + code);
+	});
+
 	target.start();
 	childs.push(target);
-	util.puts('Forever process running ' + script + ' ' + childs.length);
+	logger.log('Forever process running ' + script + ' ' + childs.length);
 }
 

@@ -10,8 +10,7 @@ var spawn = require('child_process').spawn;
 var restify = require('restify');  //要安装
 var program = require('commander');  //要安装
 var sprintf = require('sprintf').sprintf;  //要安装
-var logger = require('tracer').dailyfile({root:'.', format : "{{timestamp}} <{{title}}> {{message}}",
-		dateformat : "HH:MM:ss"});
+var logger = require('tracer').dailyfile({root:'./log', format : "{{timestamp}} <{{title}}> {{message}}", dateformat : "HH:MM:ss"});
 
 /*----------------------------------------------------
    处理命令行

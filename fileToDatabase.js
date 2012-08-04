@@ -5,13 +5,13 @@ var path = require('path');
 var fs = require('fs');
 var csv = require('csv');
 var assert = require('assert');
-var Gearman = require("node-gearman"); //要安装
+var Gearman = require("node-gearman"); //need to install
 var exec = require('child_process').exec;
 var spawn = require('child_process').spawn;
-var restify = require('restify');  //要安装
-var program = require('commander');  //要安装
-var sprintf = require('sprintf').sprintf;  //要安装
-var uuid = require('node-uuid'); //安装
+var restify = require('restify');  //need to install
+var program = require('commander');  //need to install
+var sprintf = require('sprintf').sprintf;  //need to install
+var uuid = require('node-uuid'); //need to install
 
 var log_path = __dirname + '/log';
 var logger = require('tracer').dailyfile({root:log_path, format : "{{timestamp}} <{{title}}> {{message}}", dateformat : "HH:MM:ss"});
@@ -20,7 +20,7 @@ if (!path.existsSync(log_path)) {
 }
 
 /*----------------------------------------------------
-   处理命令行
+	handle command line
 ----------------------------------------------------*/
 
 program	.version('0.0.1')
@@ -47,7 +47,7 @@ if (!path.existsSync(down_path)) {
 
 
 /*----------------------------------------------------
-  将gb2312字符串encodeUrl
+  change to gb2312 character of encodeUrl
 ----------------------------------------------------*/
 function gb2312_url(str)
 { 
@@ -70,7 +70,7 @@ function gb2312_url(str)
 }
 
 /*----------------------------------------------------
-  iconv字符编码转换
+	iconv: convert character
 ----------------------------------------------------*/
 function iconv_convert(input, from, to, done_cb) 
 {
@@ -100,7 +100,7 @@ function iconv_convert(input, from, to, done_cb)
 }
 
 /*----------------------------------------------------
-  curl下载，紧接着iconv转换，使用shell命令
+	use curl to download, shell method
 ----------------------------------------------------*/
 function curl_download(curl_opt, done_cb) 
 {
@@ -129,7 +129,8 @@ function curl_download(curl_opt, done_cb)
 
 
 /*----------------------------------------------------
-  curl下载，并解释结果
+	curl download
+	analiyz the result
 ----------------------------------------------------*/
 function send_curl_request(request, err_cb, end_cb) 
 {
@@ -144,7 +145,7 @@ function send_curl_request(request, err_cb, end_cb)
 
 		var output_file = down_path + '/'+ uuid.v4();
 
-		var curl_opt = ['--verbose', '--raw', 
+		var curl_opt = ['--verbose', 
 				'--url', new_url, 
 				'-o', output_file,
 				'--connect-timeout', request.conn_timeout];
@@ -172,8 +173,8 @@ function send_curl_request(request, err_cb, end_cb)
 
 
 /*----------------------------------------------------
-  程序入口
-  注册gearman worker服务
+	application main
+	regist the gearman worker
 ----------------------------------------------------*/
 var recv_counter = 0;
 var ok_counter = 0;
@@ -186,18 +187,15 @@ function print_counter()
 
 function main_worker(master, func_name)
 {
-	//创建一个rest请求客户端
 	var json_cli = restify.createJsonClient({
 		url: master,
 		version: '*'
 	});
 
-	//获取gearmand主机地址
 	json_cli.get('/gearmand/host', function(err, req, res, gm_host) {
 		assert.ifError(err);
 		logger.log('gearman server:: %s : %s', gm_host.host, gm_host.port);
 
-		//注册一个worker，准备执行访问ftp任务
 		var gm_worker = new Gearman(gm_host.host, gm_host.port);
 		logger.trace('registerWorker: ' + func_name);
 

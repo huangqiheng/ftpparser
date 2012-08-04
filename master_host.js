@@ -3,14 +3,14 @@
 var assert = require('assert');
 var program = require('commander');
 var restify = require('restify');
-var uuid = require('node-uuid'); //安装
+var uuid = require('node-uuid'); //need to install
 var Gearman = require("node-gearman");
 var qs = require('querystring');
 var logger = require('tracer').dailyfile({root:'.', format : "{{timestamp}} <{{title}}> {{message}}",
 		dateformat : "HH:MM:ss"});
 
 /*----------------------------------------------------
-   处理命令行
+	handle command lines
 ----------------------------------------------------*/
 
 program	.version('0.0.1')
@@ -29,11 +29,10 @@ function split_host(val, default_port) {
 var gm_host = split_host(program.gmhost, '4730');
 
 /*----------------------------------------------------
-   程序初始化，和守护函数
+	initial the program
+	start the deamon thread
 ----------------------------------------------------*/
-
 var gm_client = new Gearman(gm_host[0], gm_host[1]);
-
 
 var getdir_jobs_queue = [];
 var getdir_jobs = [];
@@ -124,7 +123,7 @@ setInterval(function ()
 }, 1000);
 
 /*----------------------------------------------------
-  web接口 
+	web interface of restful
 ----------------------------------------------------*/
 
 var server = restify.createServer();
@@ -222,7 +221,7 @@ server.put('/gearman/fileToDatabase', function (req, res, next)
 
 
 /*----------------------------------------------------
-  执行gearman client命令
+	execute the gearman client command
 ----------------------------------------------------*/
 
 function Sender(handle, func_name, ftp_ori, ftp_url, ftp_encoding, job_timeout, conn_timeout)
@@ -267,12 +266,11 @@ function submit_job_command(job_list, sender)
 		logger.debug("ERROR: " + err.message || err + ' ' + this.sender.ftp_url);
 	});
 
-	//这个时候，job完成了，意味着worker已经成功ftpdir_to_files_report将结果投递
 	job.on("data", function(data) {
 		this.result = 'done';
 	}); 
 
-	//干点什么呢？如何销毁jobs对象？
+	//how to destroy the 'job' object???
 	job.on("end", function() {
 	});
 }
@@ -286,7 +284,6 @@ function ftpdir_to_files_report (report)
 
 	getdir_jobs_done.push(finish_url);
 
-	//将新发现的目录，递归新请求
 	for (var i=0; i<new_dirs.length; i++) {
 		var item = new_dirs[i];
 		if (item) {
@@ -294,8 +291,6 @@ function ftpdir_to_files_report (report)
 			submit_job_queue(getdir_jobs_queue, sender);
 		}
 	}
-
-	//将新发现的文件，接着请求新命令
 
 	sender.func_name = 'fileToDatabase';
 
@@ -307,7 +302,6 @@ function ftpdir_to_files_report (report)
 		}
 	}
 
-	//记录空目录
 	if ((new_urls.length === 0) && (new_dirs.length === 0)) {
 		getdir_jobs_empty.push(finish_url);
 	}

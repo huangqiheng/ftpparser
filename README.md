@@ -14,66 +14,66 @@
 
 1、gearman源代码安装
 
-	1.1、安装依赖包：boost
+1.1、安装依赖包：boost
 
-		tar zxf boost_1_50_0.tar.gz && cd boost_1_50_0
-		./bootstrap.sh
-		./b2 install
+	tar zxf boost_1_50_0.tar.gz && cd boost_1_50_0
+	./bootstrap.sh
+	./b2 install
 
-	1.2、安装依赖包：libevent
+1.2、安装依赖包：libevent
 
-		非源代码安装：sudo yum -y install libevent libevent-devel
+	非源代码安装：sudo yum -y install libevent libevent-devel
 
-	1.3、安装依赖包：kerbos client
+1.3、安装依赖包：kerbos client
 
-	1.3、要使用gcc高级版本
+1.3、要使用gcc高级版本
 
-		yum install gcc44 gcc44-c++ libstdc++44-devel -y
-		然后在环境变量里加入:
-		export CC=/usr/bin/gcc44
-		export CXX=/usr/bin/g++44
+	yum install gcc44 gcc44-c++ libstdc++44-devel -y
+	然后在环境变量里加入:
+	export CC=/usr/bin/gcc44
+	export CXX=/usr/bin/g++44
 
-	1.4、安装gearman：
+1.4、安装gearman：
 
-		tar zxf gearmand-0.34.tar.gz && cd gearmand-0.34
-		./configure
-		make 
-		sudo make install
+	tar zxf gearmand-0.34.tar.gz && cd gearmand-0.34
+	./configure
+	make 
+	sudo make install
 
 2、安装redis
 
-	2.1、安装程序
+2.1、安装程序
 
-		tar -zxf redis-2.2.12.tar.gz
-		cd redis-2.2.12
-		make
-		sudo make install
+	tar -zxf redis-2.2.12.tar.gz
+	cd redis-2.2.12
+	make
+	sudo make install
 
-	2.2、配置init脚本
+2.2、配置init脚本
 
-		wget https://github.com/ijonas/dotfiles/raw/master/etc/init.d/redis-server
-		wget https://github.com/ijonas/dotfiles/raw/master/etc/redis.conf
-		sudo mv redis-server /etc/init.d/redis-server
-		sudo chmod +x /etc/init.d/redis-server
-		sudo mv redis.conf /etc/redis.conf
+	wget https://github.com/ijonas/dotfiles/raw/master/etc/init.d/redis-server
+	wget https://github.com/ijonas/dotfiles/raw/master/etc/redis.conf
+	sudo mv redis-server /etc/init.d/redis-server
+	sudo chmod +x /etc/init.d/redis-server
+	sudo mv redis.conf /etc/redis.conf
 
 3、mysql安装
 
-	1.1、源代码安装mysql
+3.1、源代码安装mysql
 
-	1.2、创建数据库
+3.2、创建数据库
 
-		CREATE DATABASE gearman;
-		USE gearman;
-		CREATE TABLE jobdone(
-				uri char(128) NOT NULL,
-				time timestamp DEFAULT NOW()
-				);
+	CREATE DATABASE gearman;
+	USE gearman;
+	CREATE TABLE jobdone(
+			uri char(128) NOT NULL,
+			time timestamp DEFAULT NOW()
+			);
 
-		CREATE UNIQUE INDEX uri_index ON jobdone(uri);
+	CREATE UNIQUE INDEX uri_index ON jobdone(uri);
 
-		GRANT ALL PRIVILEGES ON gearman.* TO jobdone@"%" IDENTIFIED BY 'jobs2jobs' WITH GRANT OPTION;
-		GRANT ALL PRIVILEGES ON gearman.* TO jobdone@localhost IDENTIFIED BY 'jobs2jobs' WITH GRANT OPTION;
+	GRANT ALL PRIVILEGES ON gearman.* TO jobdone@"%" IDENTIFIED BY 'jobs2jobs' WITH GRANT OPTION;
+	GRANT ALL PRIVILEGES ON gearman.* TO jobdone@localhost IDENTIFIED BY 'jobs2jobs' WITH GRANT OPTION;
 
 
 4、curl和iconv安装

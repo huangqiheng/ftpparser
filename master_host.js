@@ -36,7 +36,7 @@ var gm_host = split_host(program.gmhost, '4730');
 var gm_client = new Gearman(gm_host[0], gm_host[1]);
 
 var max_submited_dirs = 100;
-var max_submited_files = 50;
+var max_submited_files = 100;
 
 var getdir_jobs = [];
 var getdir_jobs_empty = [];
@@ -60,17 +60,14 @@ function enqueue_getdir(sender)
 	redis_client.lpush('getdir_queue', JSON.stringify(sender));
 }
 
-function dequeue_getdir()
+function dequeue_getdir(pop_cb)
 {
-	var result = redis_client.rpop('getdir_queue');
-
-	if (result) {
-		getdir_queue_counter--;
-		return JSON.parse(result);
-	} else {
-		return undefined;
-
-	}
+	redis_client.rpop('getdir_queue', function (err, reply) {
+		if (reply) {
+			getdir_queue_counter--;
+			pop_cb(JSON.parse(reply));
+		}
+	});
 }
 
 function enqueue_parse(sender)
@@ -79,41 +76,15 @@ function enqueue_parse(sender)
 	redis_client.lpush('parse_queue', JSON.stringify(sender));
 }
 
-function dequeue_parse()
+function dequeue_parse(pop_cb)
 {
-	var result = redis_client.rpop('parse_queue');
-
-	if (result) {
-		parse_queue_counter--;
-		return JSON.parse(result);
-	} else {
-		return undefined;
-
-	}
+	redis_client.rpop('parse_queue', function (err, reply) {
+		if (reply) {
+			parse_queue_counter--;
+			pop_cb(JSON.parse(reply));
+		}
+	});
 }
-
-/*
-function enqueue_getdir(sender)
-{
-	getdir_jobs_queue.push(JSON.parse(JSON.stringify(sender)));
-}
-
-function dequeue_getdir()
-{
-	return getdir_jobs_queue.shift();
-}
-
-function enqueue_parse(sender)
-{
-	parsing_jobs_queue.push(JSON.parse(JSON.stringify(sender)));
-}
-
-function dequeue_parse()
-{
-	return parsing_jobs_queue.shift();
-}
-
-*/
 
 var client_tick_counter = 0;
 var getdir_jobs_counter = 0;
@@ -175,17 +146,13 @@ function redo_failure_jobs(job_list, max_count)
 
 function shift_waitque_to_submit(dequeue_wait, job_list, max_count) 
 {
-	var result = 0;
 	for (var i=0; i<max_count; i++) {
-		var sender = dequeue_wait();
-		if (sender) {
-			result++;
-			submit_job_command(job_list, sender);
-		} else {
-			break;
-		}
+		dequeue_wait(function(sender){
+			if (sender) {
+				submit_job_command(job_list, sender);
+			}
+		});
 	}
-	return (result);
 }
 
 setInterval(function () 

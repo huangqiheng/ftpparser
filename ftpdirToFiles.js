@@ -56,11 +56,14 @@ function parse_csv_result(ftp_url, csv_src, new_dir_cb, new_file_cb, err_cb, end
 	csved.on('data', function(data, index) {
 		var file_name = data[data.length - 1];
 
-		if (data[1] == '1') {
-			new_file_cb(ftp_url + file_name);
-		} else {
+		var mods = data[0];
+		var is_directory = (mods[0] == 'd');
+
+		if (is_directory) {
 			file_name = ftp_url + file_name + '/';
 			new_dir_cb(file_name);
+		} else {
+			new_file_cb(ftp_url + file_name);
 		}
 	});
 		

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+var redis = require("redis");
 var assert = require('assert');
 var program = require('commander');
 var restify = require('restify');
@@ -34,22 +35,105 @@ var gm_host = split_host(program.gmhost, '4730');
 ----------------------------------------------------*/
 var gm_client = new Gearman(gm_host[0], gm_host[1]);
 
-var getdir_jobs_queue = [];
-var getdir_jobs = [];
-var getdir_jobs_done = [];
-var getdir_jobs_empty = [];
+var max_submited_dirs = 100;
+var max_submited_files = 50;
 
-var parsing_jobs_queue = [];
+var getdir_jobs = [];
+var getdir_jobs_empty = [];
 var parsing_jobs = [];
-var parsing_jobs_done = [];
+
+var getdir_queue_counter = 0;
+var parse_queue_counter = 0;
+var getdir_jobs_queue = [];
+var parsing_jobs_queue = [];
+
+var redis_client = redis.createClient();
+redis_client.flushdb();
+
+redis_client.on("error", function (err) {
+	logger.error("redis " + err);
+});
+
+function enqueue_getdir(sender)
+{
+	getdir_queue_counter++;
+	redis_client.lpush('getdir_queue', JSON.stringify(sender));
+}
+
+function dequeue_getdir()
+{
+	var result = redis_client.rpop('getdir_queue');
+
+	if (result) {
+		getdir_queue_counter--;
+		return JSON.parse(result);
+	} else {
+		return undefined;
+
+	}
+}
+
+function enqueue_parse(sender)
+{
+	parse_queue_counter++;
+	redis_client.lpush('parse_queue', JSON.stringify(sender));
+}
+
+function dequeue_parse()
+{
+	var result = redis_client.rpop('parse_queue');
+
+	if (result) {
+		parse_queue_counter--;
+		return JSON.parse(result);
+	} else {
+		return undefined;
+
+	}
+}
+
+/*
+function enqueue_getdir(sender)
+{
+	getdir_jobs_queue.push(JSON.parse(JSON.stringify(sender)));
+}
+
+function dequeue_getdir()
+{
+	return getdir_jobs_queue.shift();
+}
+
+function enqueue_parse(sender)
+{
+	parsing_jobs_queue.push(JSON.parse(JSON.stringify(sender)));
+}
+
+function dequeue_parse()
+{
+	return parsing_jobs_queue.shift();
+}
+
+*/
 
 var client_tick_counter = 0;
+var getdir_jobs_counter = 0;
+var parsed_jobs_counter = 0;
+
+function getdir_jobs_ok(url)
+{
+	getdir_jobs_counter++;
+}
+
+function parsing_jobs_ok(url)
+{
+	parsed_jobs_counter++;
+}
 
 
 function report_state() 
 {
-	logger.warn('dirs:(wait:%d -> done:%d Empty:%d)', getdir_jobs_queue.length, getdir_jobs_done.length, getdir_jobs_empty.length);
-	logger.warn('files:(wait:%d -> done:%d)', parsing_jobs_queue.length, parsing_jobs_done.length);
+	logger.warn('dirs:(wait:%d -> done:%d Empty:%d)', getdir_queue_counter, getdir_jobs_counter, getdir_jobs_empty.length);
+	logger.warn('files:(wait:%d -> done:%d)', parse_queue_counter, parsed_jobs_counter);
 }
 
 
@@ -89,11 +173,11 @@ function redo_failure_jobs(job_list, max_count)
 	return (result);
 }
 
-function push_waitque_to_submit(wait_queue, job_list, max_count) 
+function shift_waitque_to_submit(dequeue_wait, job_list, max_count) 
 {
 	var result = 0;
 	for (var i=0; i<max_count; i++) {
-		var sender = wait_queue.shift();
+		var sender = dequeue_wait();
 		if (sender) {
 			result++;
 			submit_job_command(job_list, sender);
@@ -108,14 +192,11 @@ setInterval(function ()
 {
 	client_tick_counter++;
 
-	var max_submit_dirs = 100;
-	var max_submit_files = 50;
+	var maxdo_getdir = redo_failure_jobs(getdir_jobs, max_submited_dirs);
+	shift_waitque_to_submit(dequeue_getdir, getdir_jobs, maxdo_getdir);
 
-	var maxdo_getdir = redo_failure_jobs(getdir_jobs, max_submit_dirs);
-	push_waitque_to_submit(getdir_jobs_queue, getdir_jobs, maxdo_getdir);
-
-	var maxdo_parsing = redo_failure_jobs(parsing_jobs, max_submit_files);
-	push_waitque_to_submit(parsing_jobs_queue, parsing_jobs, maxdo_parsing);
+	var maxdo_parsing = redo_failure_jobs(parsing_jobs, max_submited_files);
+	shift_waitque_to_submit(dequeue_parse, parsing_jobs, maxdo_parsing);
 
 	if (client_tick_counter % 5 === 0) {
 		report_state();
@@ -179,7 +260,7 @@ server.get('/gearman/ftpdirToFiles', function (req, res, next)
 		err_reason = 'handle logic error!';
 		var sender = Sender(null, 'ftpdirToFiles', ftp_url, ftp_url, req.params.encoding, 
 				req.params.jobTimeout, req.params.connectTimeout);
-		cmd_handle = submit_job_queue(getdir_jobs_queue, sender);
+		cmd_handle = push_getdir_queue(sender);
 	} while (false);
 
 	res.json(def_result(err_reason, cmd_handle));
@@ -237,13 +318,24 @@ function Sender(handle, func_name, ftp_ori, ftp_url, ftp_encoding, job_timeout, 
 	return sender;
 }
 
-function submit_job_queue(job_list, sender)
+
+function push_getdir_queue(sender)
 {
 	if (!sender.handle) {
 		sender.handle = uuid.v4();
 	}
 
-	job_list.push(JSON.parse(JSON.stringify(sender)));
+	enqueue_getdir(sender);
+	return (sender.handle);
+}
+
+function push_parse_queue(sender)
+{
+	if (!sender.handle) {
+		sender.handle = uuid.v4();
+	}
+
+	enqueue_parse(sender);
 	return (sender.handle);
 }
 
@@ -282,13 +374,13 @@ function ftpdir_to_files_report (report)
 	var new_dirs 	= report.dirs;
 	var finish_url = sender.ftp_url;
 
-	getdir_jobs_done.push(finish_url);
+	getdir_jobs_ok(finish_url);
 
 	for (var i=0; i<new_dirs.length; i++) {
 		var item = new_dirs[i];
 		if (item) {
 			sender.ftp_url = item;
-			submit_job_queue(getdir_jobs_queue, sender);
+			push_getdir_queue(sender);
 		}
 	}
 
@@ -298,7 +390,7 @@ function ftpdir_to_files_report (report)
 		var item = new_urls[i];
 		if (item) {
 			sender.ftp_url = item;
-			submit_job_queue(parsing_jobs_queue, sender);
+			push_parse_queue(sender);
 		}
 	}
 
@@ -313,7 +405,7 @@ function fileToDatabase_report(report)
 	var sender 	= report.sender;
 	var finish_url = sender.ftp_url;
 
-	parsing_jobs_done.push(finish_url);
+	parsing_jobs_ok(finish_url);
 }
 
 

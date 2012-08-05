@@ -1,0 +1,5 @@
+#!/bin/sh
+
+./master_host.js &
+./ftpdirToFiles &
+./fileToDatabase &

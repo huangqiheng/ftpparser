@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+var os = require('os');
 var redis = require("redis");
 var assert = require('assert');
 var program = require('commander');
@@ -28,6 +29,7 @@ function split_host(val, default_port) {
 }
 
 var gm_host = split_host(program.gmhost, '4730');
+var cpu_nums = os.cpus().length;
 
 /*----------------------------------------------------
 	initial the program
@@ -35,8 +37,8 @@ var gm_host = split_host(program.gmhost, '4730');
 ----------------------------------------------------*/
 var gm_client = new Gearman(gm_host[0], gm_host[1]);
 
-var max_submited_dirs = 100;
-var max_submited_files = 100;
+var max_submited_dirs = 2;
+var max_submited_files = cpu_nums;
 
 var getdir_jobs = [];
 var getdir_jobs_empty = [];
@@ -62,6 +64,11 @@ function enqueue_getdir(sender)
 
 function dequeue_getdir(pop_cb)
 {
+	if (parse_queue_counter) {
+		pop_cb(null);
+		return;
+	}
+
 	redis_client.rpop('getdir_queue', function (err, reply) {
 		if (reply) {
 			getdir_queue_counter--;

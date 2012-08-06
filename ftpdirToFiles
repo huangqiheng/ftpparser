@@ -32,7 +32,7 @@ stderr.hook('write', function(string, encoding, fd, write) {
     logger.debug(string);
 });
 
-for (var i=0; i<cpu_nums*3; i++) {
+for (var i=0; i<cpu_nums; i++) {
 	target = new (forever.Monitor)(script, { 'options': [ "--host", master_host] });
 
 	target.start();

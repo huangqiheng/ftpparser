@@ -49,13 +49,96 @@
 	make
 	sudo make install
 
-2.2、配置init脚本
 
-	wget https://github.com/ijonas/dotfiles/raw/master/etc/init.d/redis-server
+2.2、建立用户和日志
+
+	sudo useradd redis
+	mkdir -p /var/lib/redis
+	mkdir -p /var/log/redis
+
+2.3、配置init脚本
+
+	vim /etc/sysctl.conf
+	vm.overcommit_memory = 1
+	sysctl -p
+
 	wget https://github.com/ijonas/dotfiles/raw/master/etc/redis.conf
-	sudo mv redis-server /etc/init.d/redis-server
-	sudo chmod +x /etc/init.d/redis-server
+	修改redis.conf：
+	really-use-vm yes
+	bind 127.0.0.1
+	dir /var/lib/redis
+	logfile /var/log/redis/redislog
 	sudo mv redis.conf /etc/redis.conf
+
+	sudo vim /etc/init.d/redis-server
+	#!/bin/bash 
+	# 
+	# Init file for redis 
+	# 
+	# chkconfig: - 80 12 
+	# description: redis daemon 
+	# 
+	# processname: redis 
+	# config: /etc/redis.conf 
+	# pidfile: /var/run/redis.pid 
+	source /etc/init.d/functions 
+	#BIN="/usr/local/bin" 
+	BIN="/usr/local/bin" 
+	CONFIG="/etc/redis.conf" 
+	PIDFILE="/var/run/redis.pid" 
+	### Read configuration 
+	[ -r "$SYSCONFIG" ] && source "$SYSCONFIG" 
+	RETVAL=0 
+	prog="redis-server" 
+	desc="Redis Server" 
+	start() { 
+		if [ -e $PIDFILE ];then 
+			echo "$desc already running...." 
+				exit 1 
+				fi 
+				echo -n $"Starting $desc: " 
+				daemon $BIN/$prog $CONFIG 
+				RETVAL=$? 
+				echo 
+				[ $RETVAL -eq 0 ] && touch /var/lock/subsys/$prog 
+				return $RETVAL 
+	} 
+	stop() { 
+		echo -n $"Stop $desc: " 
+			killproc $prog 
+			RETVAL=$? 
+			echo 
+			[ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/$prog $PIDFILE 
+			return $RETVAL 
+	} 
+	restart() { 
+		stop 
+			start 
+	} 
+	case "$1" in 
+	start) 
+	start 
+	;; 
+	stop) 
+	stop 
+	;; 
+	restart) 
+	restart 
+	;; 
+	condrestart) 
+	[ -e /var/lock/subsys/$prog ] && restart 
+	RETVAL=$? 
+	;; 
+	status) 
+	status $prog 
+	RETVAL=$? 
+	;; 
+	*) 
+	echo $"Usage: $0 {start|stop|restart|condrestart|status}" 
+	RETVAL=1 
+	esac 
+	exit $RETVAL
+
 
 3、mysql安装
 

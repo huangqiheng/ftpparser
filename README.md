@@ -85,7 +85,17 @@
 
 三、安装项目所需的js包
 
-sudo npm install https://github.com/huangqiheng/ftpparser.git
+	sudo npm install commander
+	sudo npm install forever
+	sudo npm install mysql
+	sudo npm install node-uuid
+	sudo npm install restify
+	sudo npm install tracer
+	sudo npm install csv
+	sudo npm install hiredis
+	sudo npm install node-gearman
+	sudo npm install redis
+	sudo npm install sprintf
 
 
 

@@ -1,8 +1,21 @@
 #!/usr/bin/env node
 
+/*----------------------------------------------------
+	configuration part	
+----------------------------------------------------*/
+var
+    master_host = "127.0.0.1:8080",
+    download_paths = "./test1:./test2:./";
+
+
+/*----------------------------------------------------
+	application part
+----------------------------------------------------*/
+
 var util = require('util'),
     hooker = require('./hookobj.js'),
     forever = require('forever'),
+    path = require('path');
     os = require('os');
 
 var path = require('path');
@@ -13,8 +26,8 @@ if (!path.existsSync(log_path)) {
 	fs.mkdirSync(log_path, 0755);
 }
 
+
 var
-    master_host = "127.0.0.1:8080",
     cpu_nums = os.cpus().length,
     script = __filename + '.js',
     childs = [],
@@ -31,8 +44,19 @@ stderr.hook('write', function(string, encoding, fd, write) {
     logger.debug(string);
 });
 
+var downlist = download_paths.split(':');
+for (var i=0; i<downlist.length; i++) {
+	downlist[i] = path.resolve(__dirname, downlist[i]);
+}
+
+var input_downloads = downlist.join(':');
+
+logger.log(input_downloads);
+
 for (var i=0; i<cpu_nums; i++) {
-	target = new (forever.Monitor)(script, { 'options': [ "--host", master_host] });
+	target = new (forever.Monitor)(script, { 'options': [ 
+		"--host", master_host,
+		"--dir", input_downloads] });
 
 	target.start();
 	childs.push(target);

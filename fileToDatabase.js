@@ -25,6 +25,7 @@ if (!path.existsSync(log_path)) {
 
 program	.version('0.0.1')
 	.option('-h, --host [ip:port]', 'master host(TCP)', '127.0.0.1:8080')
+	.option('-d, --dir <path1:path2>', 'download temp directorys', __dirname)
 	.parse(process.argv);
 
 function split_host(val, default_port) {
@@ -39,10 +40,25 @@ var master_host = split_host(program.host, '8080');
 var master_url = 'http://'+master_host[0]+':'+master_host[1];
 var func_name = path.basename(__filename, '.js');
 
-var down_path = __dirname + '/tempdown';
+var down_paths = program.dir.split(':');
+var init_pos = 0;
 
-if (!path.existsSync(down_path)) {
-	fs.mkdirSync(down_path, 0755);
+for (var i=0; i<down_paths.length; i++) {
+	var path_name = down_paths[i] + '/tempdown';
+	down_paths[i] = path_name;
+	if (!path.existsSync(path_name)) {
+		fs.mkdirSync(path_name, 0755);
+	}
+}
+
+function down_path()
+{
+	var result = down_paths[init_pos];
+	init_pos++;
+	if (init_pos >= down_paths.length) {
+		init_pos = 0;
+	}
+	return result;
 }
 
 
@@ -143,7 +159,9 @@ function send_curl_request(request, err_cb, end_cb)
 		var new_url = gb2312_url(data);
 		logger.debug('gb2312_url cmd: ' + new_url);
 
-		var output_file = down_path + '/'+ uuid.v4();
+		var output_file = down_path() + '/'+ uuid.v4();
+
+		logger.log('download to: %s', output_file);
 
 		var curl_opt = ['--verbose', 
 				'--url', new_url, 

@@ -38,7 +38,7 @@ var cpu_nums = os.cpus().length;
 var gm_client = new Gearman(gm_host[0], gm_host[1]);
 
 var max_submited_dirs = 2;
-var max_submited_files = cpu_nums;
+var max_submited_files = (cpu_nums > 1)? cpu_nums*2 : 2;
 
 var getdir_jobs = [];
 var getdir_jobs_empty = [];
@@ -106,59 +106,51 @@ function parsing_jobs_ok(url)
 	on_finish_parse_job(url);
 }
 
+var last_parsed_jobs_count;
 
 function report_state() 
 {
-	logger.warn('dirs:(wait:%d -> done:%d Empty:%d)', getdir_queue_counter, getdir_jobs_counter, getdir_jobs_empty.length);
-	logger.warn('files:(wait:%d -> done:%d)', parse_queue_counter, parsed_jobs_counter);
+	var increase_count = parsed_jobs_counter - last_parsed_jobs_count;
+
+	logger.warn('dirs:(wait:%d -> doing:%d -> done:%d Empty:%d)  files:(wait:%d -> doing:%d -> done:%d) - inc:%d', 
+			getdir_queue_counter, getdir_jobs.length, getdir_jobs_counter, getdir_jobs_empty.length,
+			parse_queue_counter, parsing_jobs.length,  parsed_jobs_counter, increase_count);
+
+	last_parsed_jobs_count = parsed_jobs_counter;
 }
 
 
 function redo_failure_jobs(job_list, max_count) 
 {
-	var result = max_count;
-	var undone = job_list.filter(function(element, index, array) {
-		return (element.result != 'done');
-		});
+	var send_list = [];
 
-	if (undone.length) {
-		var wait_list = undone.filter(function(element, index ,array) {
-			return (element.result == 'wait');
-			});
-		var send_list = undone.filter(function(element, index ,array) {
-			return (element.result != 'wait');
-			});
-
-		var can_send = result - wait_list.length;
-
-		if (can_send > 0) {
-			job_list = wait_list;
-			for (var i=0; i<send_list.length; i++, can_send--) {
-				var job = send_list[i];
-				if (can_send > 0) {
-					result--;
-					submit_job_command(job_list, job.sender);
-				} else {
-					job_list.push(job);
-				}
-			}
+	var scan_len = job_list.length;
+	for (var i=0; i<scan_len; i++) {
+		var job = job_list.pop();
+		if (job.result == 'wait') {
+			job_list.unshift(job);
 		} else {
-			result = 0;
+			if (job.result == 'done') {
+				job = null;
+			} else {
+				send_list.push(job);
+			}
 		}
-	} 
+	}
+
+	var result = max_count - job_list.length;
+
+	for (var i=0; i<send_list.length; i++) {
+		var job = send_list[i];
+		if (result> 0) {
+			result--;
+			submit_job_command(job_list, job.sender);
+		} else {
+			job_list.push(job);
+		}
+	}
 
 	return (result);
-}
-
-function shift_waitque_to_submit(dequeue_wait, job_list, max_count) 
-{
-	for (var i=0; i<max_count; i++) {
-		dequeue_wait(function(sender){
-			if (sender) {
-				submit_job_command(job_list, sender);
-			}
-		});
-	}
 }
 
 
@@ -180,18 +172,19 @@ setInterval(function ()
 {
 	client_tick_counter++;
 
-
 	var maxdo_getdir = redo_failure_jobs(getdir_jobs, max_submited_dirs);
+	var maxdo_parsing = redo_failure_jobs(parsing_jobs, max_submited_files);
 
 	if (parse_queue_counter < max_submited_files) {
-		dequeue_getdir(function(sender){
-			if (sender) {
-				submit_job_command(getdir_jobs, sender);
-			}
-		});
+		if (getdir_jobs.length == 0) {
+			dequeue_getdir(function(sender){
+				if (sender) {
+					submit_job_command(getdir_jobs, sender);
+				}
+			});
+		}
 	}
 
-	var maxdo_parsing = redo_failure_jobs(parsing_jobs, max_submited_files);
 	if (maxdo_parsing > 0) {
 		dequeue_parse(function(sender){
 			if (sender) {
@@ -200,10 +193,10 @@ setInterval(function ()
 		});
 	}
 
-	if (client_tick_counter % 5 === 0) {
+	if (client_tick_counter % 10 === 0) {
 		report_state();
 	}
-}, 1000);
+}, 500);
 
 /*----------------------------------------------------
 	web interface of restful

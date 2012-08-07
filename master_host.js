@@ -64,11 +64,6 @@ function enqueue_getdir(sender)
 
 function dequeue_getdir(pop_cb)
 {
-	if (parse_queue_counter) {
-		pop_cb(null);
-		return;
-	}
-
 	redis_client.rpop('getdir_queue', function (err, reply) {
 		if (reply) {
 			getdir_queue_counter--;
@@ -89,6 +84,8 @@ function dequeue_parse(pop_cb)
 		if (reply) {
 			parse_queue_counter--;
 			pop_cb(JSON.parse(reply));
+		} else {
+			pop_cb(null);
 		}
 	});
 }
@@ -100,11 +97,13 @@ var parsed_jobs_counter = 0;
 function getdir_jobs_ok(url)
 {
 	getdir_jobs_counter++;
+	on_finish_getdir_job(url);
 }
 
 function parsing_jobs_ok(url)
 {
 	parsed_jobs_counter++;
+	on_finish_parse_job(url);
 }
 
 
@@ -162,15 +161,44 @@ function shift_waitque_to_submit(dequeue_wait, job_list, max_count)
 	}
 }
 
+
+function on_finish_getdir_job(ftp_url)
+{
+
+}
+
+function on_finish_parse_job(ftp_url)
+{
+	dequeue_parse(function(sender){
+		if (sender) {
+			submit_job_command(parsing_jobs, sender);
+		}
+	});
+}
+
 setInterval(function () 
 {
 	client_tick_counter++;
 
+
 	var maxdo_getdir = redo_failure_jobs(getdir_jobs, max_submited_dirs);
-	shift_waitque_to_submit(dequeue_getdir, getdir_jobs, maxdo_getdir);
+
+	if (parse_queue_counter < max_submited_files) {
+		dequeue_getdir(function(sender){
+			if (sender) {
+				submit_job_command(getdir_jobs, sender);
+			}
+		});
+	}
 
 	var maxdo_parsing = redo_failure_jobs(parsing_jobs, max_submited_files);
-	shift_waitque_to_submit(dequeue_parse, parsing_jobs, maxdo_parsing);
+	if (maxdo_parsing > 0) {
+		dequeue_parse(function(sender){
+			if (sender) {
+				submit_job_command(parsing_jobs, sender);
+			}
+		});
+	}
 
 	if (client_tick_counter % 5 === 0) {
 		report_state();

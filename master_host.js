@@ -38,7 +38,7 @@ var cpu_nums = os.cpus().length;
 var gm_client = new Gearman(gm_host[0], gm_host[1]);
 
 var max_submited_dirs = 2;
-var max_submited_files = (cpu_nums > 1)? cpu_nums*2 : 2;
+var max_submited_files = (cpu_nums > 2)? cpu_nums*3 : cpu_nums*2;
 
 var getdir_jobs = [];
 var getdir_jobs_empty = [];
